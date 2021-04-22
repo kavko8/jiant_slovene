@@ -12,6 +12,7 @@ def output_hidden_states_context(encoder):
         ModelArchitectures.ALBERT,
         ModelArchitectures.XLM_ROBERTA,
         ModelArchitectures.ELECTRA,
+        ModelArchitectures.CAMEMBERT,
     ):
         if hasattr(encoder.encoder, "output_hidden_states"):
             # Transformers < v2

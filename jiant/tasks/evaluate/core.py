@@ -20,8 +20,11 @@ import jiant.tasks.lib.tatoeba as tatoeba_lib
 from jiant.tasks.lib.templates import mlm as mlm_template
 from jiant.utils.python.datastructures import ExtendedDataClassMixin
 from jiant.utils.python.io import read_json
-from jiant.utils.string_comparing import string_f1_score, exact_match_score
+from jiant.utils.string_comparing import string_f1_score, exact_match_score, string_f1_score_lemma, exact_match_score_lemma, string_f1_score_stemm, exact_match_score_stemm
+import classla
 
+classla.download('sl')
+nlp = classla.Pipeline('sl', processors='tokenize, lemma')# download standard models for Slovenian, use hr for Croatian, sr for Serbian, bg for Bulgarian, mk for Macedonian
 
 @dataclass
 class Metrics(ExtendedDataClassMixin):
@@ -63,8 +66,6 @@ class BaseEvaluationScheme:
     ) -> Metrics:
         raise NotImplementedError()
 
-    def get_responder_accuracy(self, task, accumulator: BaseAccumulator, labels: list, tokenizer):
-        raise NotImplementedError()
 
 class ConcatenateLogitsAccumulator(BaseAccumulator):
     def __init__(self):
@@ -79,10 +80,7 @@ class ConcatenateLogitsAccumulator(BaseAccumulator):
 
     def get_guids(self):
         if self.guid_list:
-            try:
-                return np.concatenate(self.guid_list)
-            except:
-                return None
+            return np.concatenate(self.guid_list)
         else:
             return None
 
@@ -142,11 +140,6 @@ class SpanPredictionF1andEMScheme(BaseEvaluationScheme):
         f1 = sum([string_f1_score(s1, s2) for s1, s2 in zip(preds, labels)]) / len(labels)
         scores = {"f1": f1, "em": em, "avg": (f1 + em) / 2}
         return Metrics(major=scores["avg"], minor=scores)
-
-    def get_responder_accuracy(self, task, accumulator: ConcatenateStringListAccumulator, labels: list, tokenizer=None):
-        preds = self.get_preds_from_accumulator(task=task, accumulator=accumulator)
-        responder_accuracies = [int(exact_match_score(s1, s2)) for s1, s2 in zip(preds, labels)]
-        return responder_accuracies
 
     def compute_metrics_from_accumulator(
         self, task, accumulator: ConcatenateStringListAccumulator, tokenizer, labels: list
@@ -270,10 +263,6 @@ class SimpleAccuracyEvaluationScheme(BaseLogitsEvaluationScheme):
         acc = float((preds == labels).mean())
         return Metrics(major=acc, minor={"acc": acc})
 
-    def get_responder_accuracy(self, task, accumulator, labels, tokenizer=None):
-        preds = self.get_preds_from_accumulator(task=task, accumulator=accumulator)
-        responder_accuracies = [int(s1 == s2) for s1, s2 in zip(preds, labels)]
-        return responder_accuracies
 
 class MCTACOEvaluationScheme(BaseLogitsEvaluationScheme):
     @classmethod
@@ -282,26 +271,6 @@ class MCTACOEvaluationScheme(BaseLogitsEvaluationScheme):
         pred = np.argmax(logits, axis=1)
         guid = accumulator.get_guids()
         return guid, pred
-
-    def get_responder_accuracy(self, task, accumulator, labels, tokenizer=None):
-        guid, pred = self.get_preds_from_accumulator(task=task, accumulator=accumulator)
-        em_ls = []
-        label_pred_by_question = {}
-
-        for one_guid, one_pred, one_label in zip(guid, pred, labels):
-            split, question_id, example_id = one_guid.split("-")
-            if question_id not in label_pred_by_question:
-                label_pred_by_question[question_id] = [], []
-            label_pred_by_question[question_id][0].append(one_label)
-            label_pred_by_question[question_id][1].append(one_pred)
-
-        em_ls = [
-            float(group_label == group_pred)
-            for group_label, group_pred in label_pred_by_question.values()
-        ]
-        responder_accuracies = em_ls
-        #responder_accuracies = [int(s1 == s2) for s1, s2 in zip(preds, labels)]
-        return responder_accuracies
 
     @classmethod
     def compute_metrics_from_accumulator(self, task, accumulator, tokenizer, labels) -> Metrics:
@@ -429,11 +398,6 @@ class MultipleChoiceAccuracyEvaluationScheme(BaseLogitsEvaluationScheme):
             preds=preds, labels=labels
         )
 
-    def get_responder_accuracy(self, task, accumulator, labels, tokenizer=None):
-        preds = SimpleAccuracyEvaluationScheme.get_preds_from_accumulator(task=task, accumulator=accumulator)
-        responder_accuracies = [int(s1 == s2) for s1, s2 in zip(preds, labels)]
-        return responder_accuracies
-
 
 class CommitmentBankEvaluationScheme(BaseLogitsEvaluationScheme):
     def get_preds_from_accumulator(self, task, accumulator):
@@ -454,10 +418,6 @@ class CommitmentBankEvaluationScheme(BaseLogitsEvaluationScheme):
             minor={"acc": acc, "avg_f1": avg_f1, "f11": f11, "f12": f12, "f13": f13},
         )
 
-    def get_responder_accuracy(self, task, accumulator, labels, tokenizer=None):
-        preds = self.get_preds_from_accumulator(task=task, accumulator=accumulator)
-        responder_accuracies = [int(s1 == s2) for s1, s2 in zip(preds, labels)]
-        return responder_accuracies
 
 class MultiRCEvaluationScheme(BaseEvaluationScheme):
     def get_accumulator(self):
@@ -631,6 +591,265 @@ class ReCordEvaluationScheme(BaseEvaluationScheme):
         return max(scores_for_ground_truths)
 
 
+class ReCordLemmaEvaluationScheme(BaseEvaluationScheme):
+    def get_accumulator(self):
+        return RecordAccumulator()
+
+    @classmethod
+    def get_labels_from_examples(cls, examples):
+        return [
+            RecordLabelData(
+                passage_idx=example.passage_idx,
+                question_idx=example.question_idx,
+                entity_str=example.entity_str,
+                answers_dict=example.answers_dict,
+            )
+            for example in examples
+        ]
+
+    @classmethod
+    def get_labels_from_cache_and_examples(cls, task, cache, examples):
+        return cls.get_labels_from_examples(examples=examples)
+
+    @classmethod
+    def get_preds_from_accumulator(cls, task, accumulator):
+        logits, entity_strs = accumulator.get_accumulated()
+        guid_list = accumulator.get_guids()
+
+        question_ids = []
+        for guid in guid_list:
+            question_ids.append(guid.split("-")[2])
+
+        # group logits by question id then reorder for submission
+        # need question id, logit, and entity_str
+        # for example, dict of question id to logit and entity_str
+        max_logits = {}
+        for logit, entity_str, question_id in zip(logits, entity_strs, question_ids):
+            if (question_id not in max_logits) or (max_logits[question_id]["logit"][1] < logit[1]):
+                max_logits[question_id] = {"logit": logit, "entity_str": entity_str}
+
+        # Convert labels of max_logits to prediction format
+        preds = []
+        for question_idx, logit_entity in max_logits.items():
+            preds.append({"idx": question_idx, "label": logit_entity["entity_str"]})
+
+        return preds
+
+    def compute_metrics_from_accumulator(
+        self, task, accumulator: RecordAccumulator, tokenizer, labels: List
+    ) -> Metrics:
+        predictions_dict, metrics = self.compute_preds_and_metrics(task, accumulator)
+        return metrics
+
+    @classmethod
+    def compute_preds_and_metrics(cls, task, accumulator):
+        f1_ls = []
+        em_ls = []
+        predictions_dict = {}
+
+        preds = cls.get_preds_from_accumulator(task, accumulator)
+        guid_list = accumulator.get_guids()
+        gold_label_list_of_sets = accumulator.get_gold_label_list()
+
+        assert task.state is not None
+        examples = task.get_val_test_examples() if task.state == "val_test" else task.get_val_examples()
+        assert len(examples) == len(gold_label_list_of_sets)
+        query_texts = {}
+        for example in examples:
+            query_text = example.query_text
+            query_guid = example.guid.split("-")[2]
+            query_texts[query_guid] = query_text
+
+        question_ids = []
+        for guid in guid_list:
+            question_ids.append(guid.split("-")[2])
+
+        # Reduce list of gold label sets to a gold label set per question_id
+        gold_labels = {}
+        for question_id, gold_label_set in zip(question_ids, gold_label_list_of_sets):
+            if question_id in gold_labels:
+                assert gold_label_set == gold_labels[question_id]
+            else:
+                gold_labels[question_id] = gold_label_set
+
+        def get_lemmatized(entities, query):
+            return_str = False
+            if not isinstance(entities, set):
+                str_text = entities
+                entities = set()
+                entities.add(str_text)
+                return_str = True
+            new_entities = set()
+            filled_query_position = query.replace("@placeholder", "MYPLACEHOLDER")
+            lemmatized = nlp(filled_query_position).to_dict()[0][0]
+            id_placeholder = None
+            for token in lemmatized:
+                if token["text"].startswith("MYPLACEHOLDER"):
+                    id_placeholder = token["id"]
+
+            if id_placeholder is None:
+                raise TypeError('"id_placeholder" is of type None')
+            for entity in entities:
+                token_entity = nlp(entity).to_dict()[0][0]
+                len_entity = len(token_entity)
+
+                filled_query_text = query.replace("@placeholder", entity)
+                lemmatized = nlp(filled_query_text).to_dict()[0][0]
+
+                new_str = ""
+                for num, word in enumerate(token_entity):
+                    word_entity = word["text"]
+                    for token in lemmatized:
+                        if token["text"] == word_entity:
+                            if token["id"] >= id_placeholder:
+
+                                if num+1 < len_entity:
+                                    new_str += token["lemma"]
+                                    new_str += " "
+                                else:
+                                    new_str += token["lemma"]
+                new_entities.add(new_str)
+            return new_entities if not return_str else new_str
+
+        for pred, gold_label_set, query in zip(preds, gold_labels.values(), query_texts.values()):
+            pred_ans = pred["label"]
+            pred_ans = get_lemmatized(pred_ans, query)
+            gold_label_set = get_lemmatized(gold_label_set, query)
+            # F1
+            f1 = cls.metric_max_over_ground_truths(string_f1_score_lemma, pred_ans, gold_label_set)
+            f1_ls.append(f1)
+
+            # EM
+            em = cls.metric_max_over_ground_truths(exact_match_score_lemma, pred_ans, gold_label_set)
+            em_ls.append(em)
+
+        em = sum(em_ls) / len(em_ls)
+        f1 = sum(f1_ls) / len(f1_ls)
+        minor = {
+            "em": em,
+            "f1": f1,
+            "f1_em": (f1 + em) / 2,
+        }
+        metrics = Metrics(major=minor["f1_em"], minor=minor,)
+        return predictions_dict, metrics
+
+    @classmethod
+    def metric_max_over_ground_truths(cls, metric_fn, prediction, ground_truths):
+        """Compute max metric between prediction and each ground truth.
+        From official ReCoRD eval script
+        """
+        scores_for_ground_truths = []
+        for ground_truth in ground_truths:
+            score = metric_fn(prediction, ground_truth)
+            scores_for_ground_truths.append(score)
+        return max(scores_for_ground_truths)
+
+
+class ReCordStemmEvaluationScheme(BaseEvaluationScheme):
+    def get_accumulator(self):
+        return RecordAccumulator()
+
+    @classmethod
+    def get_labels_from_examples(cls, examples):
+        return [
+            RecordLabelData(
+                passage_idx=example.passage_idx,
+                question_idx=example.question_idx,
+                entity_str=example.entity_str,
+                answers_dict=example.answers_dict,
+            )
+            for example in examples
+        ]
+
+    @classmethod
+    def get_labels_from_cache_and_examples(cls, task, cache, examples):
+        return cls.get_labels_from_examples(examples=examples)
+
+    @classmethod
+    def get_preds_from_accumulator(cls, task, accumulator):
+        logits, entity_strs = accumulator.get_accumulated()
+        guid_list = accumulator.get_guids()
+
+        question_ids = []
+        for guid in guid_list:
+            question_ids.append(guid.split("-")[2])
+
+        # group logits by question id then reorder for submission
+        # need question id, logit, and entity_str
+        # for example, dict of question id to logit and entity_str
+        max_logits = {}
+        for logit, entity_str, question_id in zip(logits, entity_strs, question_ids):
+            if (question_id not in max_logits) or (max_logits[question_id]["logit"][1] < logit[1]):
+                max_logits[question_id] = {"logit": logit, "entity_str": entity_str}
+
+        # Convert labels of max_logits to prediction format
+        preds = []
+        for question_idx, logit_entity in max_logits.items():
+            preds.append({"idx": question_idx, "label": logit_entity["entity_str"]})
+
+        return preds
+
+    def compute_metrics_from_accumulator(
+            self, task, accumulator: RecordAccumulator, tokenizer, labels: List
+    ) -> Metrics:
+        predictions_dict, metrics = self.compute_preds_and_metrics(task, accumulator)
+        return metrics
+
+    @classmethod
+    def compute_preds_and_metrics(cls, task, accumulator):
+        f1_ls = []
+        em_ls = []
+        predictions_dict = {}
+
+        preds = cls.get_preds_from_accumulator(task, accumulator)
+        guid_list = accumulator.get_guids()
+        gold_label_list_of_sets = accumulator.get_gold_label_list()
+
+        question_ids = []
+        for guid in guid_list:
+            question_ids.append(guid.split("-")[2])
+
+        # Reduce list of gold label sets to a gold label set per question_id
+        gold_labels = {}
+        for question_id, gold_label_set in zip(question_ids, gold_label_list_of_sets):
+            if question_id in gold_labels:
+                assert gold_label_set == gold_labels[question_id]
+            else:
+                gold_labels[question_id] = gold_label_set
+
+        for pred, gold_label_set in zip(preds, gold_labels.values()):
+            pred_ans = pred["label"]
+
+            # F1
+            f1 = cls.metric_max_over_ground_truths(string_f1_score_stemm, pred_ans, gold_label_set)
+            f1_ls.append(f1)
+
+            # EM
+            em = cls.metric_max_over_ground_truths(exact_match_score_stemm, pred_ans, gold_label_set)
+            em_ls.append(em)
+
+        em = sum(em_ls) / len(em_ls)
+        f1 = sum(f1_ls) / len(f1_ls)
+        minor = {
+            "em": em,
+            "f1": f1,
+            "f1_em": (f1 + em) / 2,
+        }
+        metrics = Metrics(major=minor["f1_em"], minor=minor, )
+        return predictions_dict, metrics
+
+    @classmethod
+    def metric_max_over_ground_truths(cls, metric_fn, prediction, ground_truths):
+        """Compute max metric between prediction and each ground truth.
+        From official ReCoRD eval script
+        """
+        scores_for_ground_truths = []
+        for ground_truth in ground_truths:
+            score = metric_fn(prediction, ground_truth)
+            scores_for_ground_truths.append(score)
+        return max(scores_for_ground_truths)
+
+
 class CCGEvaluationScheme(BaseEvaluationScheme):
     def get_accumulator(self):
         return ConcatenateLogitsAccumulator()
@@ -774,21 +993,6 @@ class SQuADEvaluationScheme(BaseEvaluationScheme):
     def get_label_from_data_row(cls, data_row):
         return squad_style.PartialDataRow.from_data_row(data_row)
 
-    def get_responder_accuracy(self, task, accumulator: BaseAccumulator, labels, tokenizer):
-        logits = accumulator.get_accumulated()
-        results, predictions = squad_style.compute_predictions_logits_v3(
-            data_rows=labels,
-            logits=logits,
-            n_best_size=task.n_best_size,
-            max_answer_length=task.max_answer_length,
-            do_lower_case=model_resolution.resolve_is_lower_case(tokenizer),
-            version_2_with_negative=task.version_2_with_negative,
-            null_score_diff_threshold=task.null_score_diff_threshold,
-            tokenizer=tokenizer,
-        )
-        responder_accuracies = list(results["responder_accuracies"].values())
-        return responder_accuracies
-   
 
 class XlingQAEvaluationScheme(BaseEvaluationScheme):
     @classmethod
@@ -1095,6 +1299,10 @@ def get_evaluation_scheme_for_task(task) -> BaseEvaluationScheme:
         return MultiLabelAccAndF1EvaluationScheme()
     elif isinstance(task, tasks.ReCoRDTask):
         return ReCordEvaluationScheme()
+    elif isinstance(task, tasks.ReCoRDTaskLemma):
+        return ReCordLemmaEvaluationScheme()
+    elif isinstance(task, tasks.ReCoRDTaskStemm):
+        return ReCordStemmEvaluationScheme()
     elif isinstance(
         task,
         (

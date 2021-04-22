@@ -57,10 +57,7 @@ class PiqaTask(mc_template.AbstractMultipleChoiceTask):
 
     def get_test_examples(self):
         return self._create_examples(
-            lines=zip(read_json_lines(self.test_path),
-                read_file_lines(self.path_dict["test_labels"], strip_lines=True),
-            ),
-            #read_json_lines(self.test_path)),
+            lines=zip(read_json_lines(self.test_path), read_json_lines(self.test_path)),
             set_type="test",
         )
 
@@ -74,7 +71,7 @@ class PiqaTask(mc_template.AbstractMultipleChoiceTask):
                     guid="%s-%s" % (set_type, i),
                     prompt=ex["goal"],
                     choice_list=[ex["sol1"], ex["sol2"]],
-                    label=int(label_string),
+                    label=int(label_string) if set_type != "test" else cls.CHOICE_KEYS[-1],
                 )
             )
 

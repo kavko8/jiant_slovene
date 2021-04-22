@@ -100,7 +100,7 @@ class MnliTask(GlueMixin, Task):
                     guid="%s-%s" % (set_type, i),
                     premise=line["premise"],
                     hypothesis=line["hypothesis"],
-                    label=line["label"],
+                    label=line["label"] if set_type != "test" else cls.LABELS[-1],
                 )
             )
         return examples

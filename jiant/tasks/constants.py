@@ -20,6 +20,8 @@ SUPERGLUE_TASKS = {
     "wsc",
     "boolq",
     "record",
+    "record_lemma",
+    "record_stemm",
     "rte",
     "superglue_broadcoverage_diagnostics",
     "superglue_winogender_diagnostics",

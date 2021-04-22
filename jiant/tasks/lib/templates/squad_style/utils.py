@@ -585,7 +585,7 @@ def squad_evaluate(examples, preds, no_answer_probs=None, no_answer_probability_
     )
 
     evaluation = make_eval_dict(exact_threshold, f1_threshold)
-   
+
     if has_answer_qids:
         has_ans_eval = make_eval_dict(exact_threshold, f1_threshold, qid_list=has_answer_qids)
         merge_eval(evaluation, has_ans_eval, "HasAns")
@@ -596,6 +596,7 @@ def squad_evaluate(examples, preds, no_answer_probs=None, no_answer_probability_
 
     if no_answer_probs:
         find_all_best_thresh(evaluation, preds, exact, f1, no_answer_probs, qas_id_to_has_answer)
+
     return evaluation
 
 
@@ -637,15 +638,13 @@ def merge_eval(main_eval, new_eval, prefix):
 
 
 def find_all_best_thresh(main_eval, preds, exact_raw, f1_raw, na_probs, qid_to_has_ans):
-    best_exact, exact_thresh, thres_score_ex = find_best_thresh(preds, exact_raw, na_probs, qid_to_has_ans)
-    best_f1, f1_thresh, thres_score_f1 = find_best_thresh(preds, f1_raw, na_probs, qid_to_has_ans)
+    best_exact, exact_thresh = find_best_thresh(preds, exact_raw, na_probs, qid_to_has_ans)
+    best_f1, f1_thresh = find_best_thresh(preds, f1_raw, na_probs, qid_to_has_ans)
 
     main_eval["best_exact"] = best_exact
     main_eval["best_exact_thresh"] = exact_thresh
     main_eval["best_f1"] = best_f1
     main_eval["best_f1_thresh"] = f1_thresh
-    main_eval["responder_accuracies"]=thres_score_ex
-    main_eval["responder_accuracies_f1"]=thres_score_f1
 
 
 def find_best_thresh(preds, scores, na_probs, qid_to_has_ans):
@@ -654,14 +653,11 @@ def find_best_thresh(preds, scores, na_probs, qid_to_has_ans):
     best_score = cur_score
     best_thresh = 0.0
     qid_list = sorted(na_probs, key=lambda k: na_probs[k])
-    thres_score = {}
-    thres_score = {k: 1 for k in qid_to_has_ans if not qid_to_has_ans[k]}
     for _, qid in enumerate(qid_list):
         if qid not in scores:
             continue
         if qid_to_has_ans[qid]:
             diff = scores[qid]
-            thres_score[qid]=scores[qid]
         else:
             if preds[qid]:
                 diff = -1
@@ -671,8 +667,7 @@ def find_best_thresh(preds, scores, na_probs, qid_to_has_ans):
         if cur_score > best_score:
             best_score = cur_score
             best_thresh = na_probs[qid]
-
-    return 100.0 * best_score / len(scores), best_thresh, thres_score
+    return 100.0 * best_score / len(scores), best_thresh
 
 
 def get_raw_scores(examples, preds):

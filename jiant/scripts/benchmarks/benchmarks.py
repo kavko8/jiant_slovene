@@ -53,6 +53,8 @@ class SuperglueBenchmark(Benchmark):
         "copa": "COPA.jsonl",
         "multirc": "MultiRC.jsonl",
         "record": "ReCoRD.jsonl",
+        "record_lemma": "ReCoRD_lemma.jsonl",
+        "record_stemm": "ReCoRD_stemm.jsonl",
         "rte": "RTE.jsonl",
         "wic": "WiC.jsonl",
         "wsc": "WSC.jsonl",
@@ -68,6 +70,6 @@ class SuperglueBenchmark(Benchmark):
         py_io.write_jsonl(
             data=formatted_preds,
             path=os.path.join(
-                SuperglueBenchmark.BENCHMARK_SUBMISSION_FILENAMES[task_name], output_filepath
+                output_filepath
             ),
         )

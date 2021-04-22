@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import torch
 
 import jiant.tasks.evaluate as evaluate
+import jiant.tasks.lib.record_lemma
 import jiant.utils.torch_utils as torch_utils
 from jiant.proj.main.components.container_setup import JiantTaskContainer
 from jiant.proj.main.modeling.primary import JiantModel, wrap_jiant_forward
@@ -55,10 +56,12 @@ class JiantRunner:
         self.device = device
         self.rparams = rparams
         self.log_writer = log_writer
+        self.state = None
 
         self.model = self.jiant_model
 
     def run_train(self):
+        self.state = "train"
         for _ in self.run_train_context():
             pass
 
@@ -125,6 +128,7 @@ class JiantRunner:
         )
 
     def run_val(self, task_name_list, use_subset=None, return_preds=False, verbose=True):
+        self.state = "val"
         evaluate_dict = {}
         val_dataloader_dict = self.get_val_dataloader_dict(
             task_name_list=task_name_list, use_subset=use_subset
@@ -146,17 +150,35 @@ class JiantRunner:
             )
         return evaluate_dict
 
+    def run_val_test(self, task_name_list, use_subset=None, return_preds=False, verbose=True):
+        evaluate_dict = {}
+        val_test_dataloader_dict = self.get_val_test_dataloader_dict(
+            task_name_list=task_name_list, use_subset=use_subset
+        )
+        val_test_labels_dict = self.get_val_test_labels_dict(
+            task_name_list=task_name_list, use_subset=use_subset
+        )
+        for task_name in task_name_list:
+            task = self.jiant_task_container.task_dict[task_name]
+            evaluate_dict[task_name] = run_val_test(
+                val_test_dataloader=val_test_dataloader_dict[task_name],
+                val_test_labels=val_test_labels_dict[task_name],
+                jiant_model=self.jiant_model,
+                task=task,
+                device=self.device,
+                local_rank=self.rparams.local_rank,
+                return_preds=return_preds,
+                verbose=verbose,
+            )
+        return evaluate_dict
+
     def run_test(self, task_name_list, verbose=True):
         evaluate_dict = {}
         test_dataloader_dict = self.get_test_dataloader_dict()
-        test_labels_dict = self.get_test_labels_dict(
-            task_name_list=task_name_list, use_subset=None
-        )
         for task_name in task_name_list:
             task = self.jiant_task_container.task_dict[task_name]
             evaluate_dict[task_name] = run_test(
                 test_dataloader=test_dataloader_dict[task_name],
-                test_labels=test_labels_dict[task_name],
                 jiant_model=self.jiant_model,
                 task=task,
                 device=self.device,
@@ -211,20 +233,27 @@ class JiantRunner:
             val_labels_dict[task_name] = val_labels
         return val_labels_dict
 
-    def get_test_labels_dict(self, task_name_list, use_subset=False):
-        test_labels_dict = {}
-        for task_name in task_name_list:
-            task_specific_config = self.jiant_task_container.task_specific_configs[task_name]
-            test_labels_cache = self.jiant_task_container.task_cache_dict[task_name]["test_labels"]
-            test_labels = test_labels_cache.get_all()
-            test_labels_dict[task_name] = test_labels
-        return test_labels_dict
-   
     def get_test_dataloader_dict(self):
         return self._get_eval_dataloader_dict(
             task_name_list=self.jiant_task_container.task_run_config.test_task_list,
             phase=PHASE.TEST,
         )
+
+    def get_val_test_dataloader_dict(self, task_name_list, use_subset=False):
+        return self._get_eval_dataloader_dict(
+            phase="val_test", task_name_list=task_name_list, use_subset=use_subset,
+        )
+
+    def get_val_test_labels_dict(self, task_name_list, use_subset=False):
+        val_test_labels_dict = {}
+        for task_name in task_name_list:
+            task_specific_config = self.jiant_task_container.task_specific_configs[task_name]
+            val_test_labels_cache = self.jiant_task_container.task_cache_dict[task_name]["val_test_labels"]
+            val_test_labels = val_test_labels_cache.get_all()
+            if use_subset:
+                val_test_labels = val_test_labels[: task_specific_config.eval_subset_num]
+            val_test_labels_dict[task_name] = val_test_labels
+        return val_test_labels_dict
 
     def complex_backpropagate(self, loss, gradient_accumulation_steps):
         return complex_backpropagate(
@@ -277,6 +306,8 @@ def run_val(
     # Reminder:
     #   val_dataloader contains mostly PyTorch-relevant info
     #   val_labels might contain more details information needed for full evaluation
+    if isinstance(task, jiant.tasks.lib.record_lemma.ReCoRDTaskLemma):
+        task.state = "val"
     if not local_rank == -1:
         return
     jiant_model.eval()
@@ -326,9 +357,72 @@ def run_val(
     return output
 
 
+def run_val_test(
+    val_test_dataloader,
+    val_test_labels,
+    jiant_model: JiantModel,
+    task,
+    device,
+    local_rank,
+    return_preds=False,
+    verbose=True,
+):
+    # Reminder:
+    #   val_dataloader contains mostly PyTorch-relevant info
+    #   val_labels might contain more details information needed for full evaluation
+    if isinstance(task, jiant.tasks.lib.record_lemma.ReCoRDTaskLemma):
+        task.state = "val_test"
+    if not local_rank == -1:
+        return
+    jiant_model.eval()
+    total_eval_loss = 0
+    nb_eval_steps, nb_eval_examples = 0, 0
+    evaluation_scheme = evaluate.get_evaluation_scheme_for_task(task=task)
+    eval_accumulator = evaluation_scheme.get_accumulator()
+
+    for step, (batch, batch_metadata) in enumerate(
+        maybe_tqdm(val_test_dataloader, desc=f"Eval ({task.name}, TestVal)", verbose=verbose)
+    ):
+        batch = batch.to(device)
+
+        with torch.no_grad():
+            model_output = wrap_jiant_forward(
+                jiant_model=jiant_model, batch=batch, task=task, compute_loss=True,
+            )
+        batch_logits = model_output.logits.detach().cpu().numpy()
+        batch_loss = model_output.loss.mean().item()
+        total_eval_loss += batch_loss
+        eval_accumulator.update(
+            batch_logits=batch_logits,
+            batch_loss=batch_loss,
+            batch=batch,
+            batch_metadata=batch_metadata,
+        )
+
+        nb_eval_examples += len(batch)
+        nb_eval_steps += 1
+    eval_loss = total_eval_loss / nb_eval_steps
+    tokenizer = (
+        jiant_model.tokenizer
+        if not torch_utils.is_data_parallel(jiant_model)
+        else jiant_model.module.tokenizer
+    )
+    output = {
+        "accumulator": eval_accumulator,
+        "loss": eval_loss,
+        "metrics": evaluation_scheme.compute_metrics_from_accumulator(
+            task=task, accumulator=eval_accumulator, labels=val_test_labels, tokenizer=tokenizer,
+        ),
+    }
+    if return_preds:
+        output["preds"] = evaluation_scheme.get_preds_from_accumulator(
+            task=task, accumulator=eval_accumulator,
+        )
+    return output
+
+
 def run_test(
     test_dataloader,
-    test_labels,
     jiant_model: JiantModel,
     task,
     device,
@@ -336,6 +430,8 @@ def run_test(
     verbose=True,
     return_preds=True,
 ):
+    if isinstance(task, jiant.tasks.lib.record_lemma.ReCoRDTaskLemma):
+        task.state = None
     if not local_rank == -1:
         return
     jiant_model.eval()
@@ -359,24 +455,7 @@ def run_test(
         "accumulator": eval_accumulator,
     }
     if return_preds:
-        try:
-            tokenizer = (
-                jiant_model.tokenizer
-                if not torch_utils.is_data_parallel(jiant_model)
-                else jiant_model.module.tokenizer
-            )  
-            output["responder_accuracies"]=evaluation_scheme.get_responder_accuracy(
-                task=task, accumulator=eval_accumulator, labels=test_labels,tokenizer=tokenizer,
-            )
-        except:
-            print("responder accuracy not implemented")
-
-        try:
-            output["preds"] = evaluation_scheme.get_preds_from_accumulator(
-                task=task, accumulator=eval_accumulator,
-            )
-            
-        except:
-            output["preds"] = []
-            print("Preds not implemented")
+        output["preds"] = evaluation_scheme.get_preds_from_accumulator(
+            task=task, accumulator=eval_accumulator,
+        )
     return output

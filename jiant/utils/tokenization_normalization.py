@@ -63,7 +63,9 @@ def normalize_tokenizations(
         modifed_space_tokenization = bow_tag_tokens(space_tokenization)
         modifed_target_tokenization = ["Ġ" + target_tokenization[0]] + target_tokenization[1:]
         modifed_target_tokenization = _process_bytebpe_tokens(modifed_target_tokenization)
-    elif isinstance(tokenizer, (transformers.AlbertTokenizer, transformers.XLMRobertaTokenizer)):
+    elif isinstance(tokenizer, (transformers.AlbertTokenizer,
+                                transformers.XLMRobertaTokenizer,
+                                transformers.CamembertTokenizer)):
         space_tokenization = [token.lower() for token in space_tokenization]
         modifed_space_tokenization = bow_tag_tokens(space_tokenization)
         modifed_target_tokenization = _process_sentencepiece_tokens(target_tokenization)

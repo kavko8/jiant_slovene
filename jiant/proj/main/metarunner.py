@@ -60,8 +60,6 @@ class JiantMetarunner(AbstractMetarunner):
         save_every_steps,
         eval_every_steps,
         save_checkpoint_every_steps,
-        save_model_every_logscale,
-        max_step,
         no_improvements_for_n_evals,
         checkpoint_saver,
         output_dir,
@@ -75,8 +73,6 @@ class JiantMetarunner(AbstractMetarunner):
         self.save_every_steps = save_every_steps
         self.eval_every_steps = eval_every_steps
         self.save_checkpoint_every_steps = save_checkpoint_every_steps
-        self.save_model_every_logscale = save_model_every_logscale
-        self.max_step = max_step
         self.no_improvements_for_n_evals = no_improvements_for_n_evals
         self.checkpoint_saver = checkpoint_saver
         self.output_dir = output_dir
@@ -116,14 +112,7 @@ class JiantMetarunner(AbstractMetarunner):
             yield
 
     def should_save_model(self) -> bool:
-        if self.save_every_steps == 0 and not self.save_model_every_logscale:
-            return False
-
-        if self.save_model_every_logscale:
-            save_steps = [0.01,0.10,0.25,0.50]
-            for s in save_steps:
-                if self.train_state.global_steps == int(self.max_step *  s):
-                    return True
+        if self.save_every_steps == 0:
             return False
         return (self.train_state.global_steps + 1) % self.save_every_steps == 0
 

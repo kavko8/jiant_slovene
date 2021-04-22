@@ -4,7 +4,7 @@ benchmark leaderboards.
 import os
 import argparse
 
-from jiant.scripts.postproc.benchmarks import GlueBenchmark, SuperglueBenchmark
+from jiant.scripts.benchmarks.benchmarks import GlueBenchmark, SuperglueBenchmark
 
 
 SUPPORTED_BENCHMARKS = {"GLUE": GlueBenchmark, "SUPERGLUE": SuperglueBenchmark}

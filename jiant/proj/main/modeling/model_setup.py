@@ -297,6 +297,7 @@ def create_taskmodel(
         ModelArchitectures.ALBERT,
         ModelArchitectures.XLM_ROBERTA,
         ModelArchitectures.ELECTRA,
+        ModelArchitectures.CAMEMBERT,
     ]:
         hidden_size = encoder.config.hidden_size
         hidden_dropout_prob = encoder.config.hidden_dropout_prob
@@ -407,6 +408,12 @@ def create_taskmodel(
                 vocab_size=encoder.config.vocab_size,
                 layer_norm_eps=encoder.config.layer_norm_eps,
             )
+        elif model_arch == ModelArchitectures.CAMEMBERT:
+            mlm_head = heads.CamembertMLMHead(
+                hidden_size=hidden_size,
+                vocab_size=encoder.config.vocab_size,
+                layer_norm_eps=encoder.config.layer_norm_eps,
+            )
         elif model_arch in (
             ModelArchitectures.BART,
             ModelArchitectures.MBART,
@@ -461,6 +468,8 @@ def get_encoder(model_arch, ancestor_model):
         return ancestor_model.model
     elif model_arch == ModelArchitectures.ELECTRA:
         return ancestor_model.electra
+    elif model_arch == ModelArchitectures.CAMEMBERT:
+        return ancestor_model.camembert
     else:
         raise KeyError(model_arch)
 
@@ -508,6 +517,11 @@ TRANSFORMERS_CLASS_SPEC_DICT = {
         tokenizer_class=transformers.ElectraTokenizer,
         model_class=transformers.ElectraForPreTraining,
     ),
+    ModelArchitectures.CAMEMBERT: TransformersClassSpec(
+        config_class=transformers.CamembertConfig,
+        tokenizer_class=transformers.CamembertTokenizer,
+        model_class=transformers.CamembertForMaskedLM,
+    )
 }
 
 
@@ -541,6 +555,7 @@ MODEL_PREFIX = {
     ModelArchitectures.BART: "model",
     ModelArchitectures.MBART: "model",
     ModelArchitectures.ELECTRA: "electra",
+    ModelArchitectures.CAMEMBERT: "camembert"
 }
 
 

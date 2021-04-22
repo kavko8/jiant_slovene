@@ -151,6 +151,31 @@ class RobertaMLMHead(BaseMLMHead):
         return logits
 
 
+# This needs to be verified
+class CamembertMLMHead(BaseMLMHead):
+    """From RobertaLMHead"""
+
+    def __init__(self, hidden_size, vocab_size, layer_norm_eps=1e-05):  # 1e-05 ??
+        super().__init__()
+        self.dense = nn.Linear(hidden_size, hidden_size)
+        self.layer_norm = transformers.modeling_bert.BertLayerNorm(hidden_size, eps=layer_norm_eps)
+
+        self.decoder = nn.Linear(hidden_size, vocab_size, bias=False)
+        self.bias = nn.Parameter(torch.zeros(vocab_size), requires_grad=True)
+
+        # Need a link between the two variables so that the bias is correctly resized with
+        # `resize_token_embeddings`
+        self.decoder.bias = self.bias
+
+    def forward(self, unpooled):
+        x = self.dense(unpooled)
+        x = transformers.modeling_bert.gelu(x)
+        x = self.layer_norm(x)
+
+        logits = self.decoder(x) + self.bias
+        return logits
+
+
 class AlbertMLMHead(nn.Module):
     """From AlbertMLMHead"""
 

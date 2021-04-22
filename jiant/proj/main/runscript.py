@@ -29,15 +29,16 @@ class RunConfiguration(zconf.RunConfig):
     # === Running Setup === #
     do_train = zconf.attr(action="store_true")
     do_val = zconf.attr(action="store_true")
+    do_val_test = zconf.attr(action="store_true")
     do_save = zconf.attr(action="store_true")
     do_save_last = zconf.attr(action="store_true")
     do_save_best = zconf.attr(action="store_true")
     write_val_preds = zconf.attr(action="store_true")
+    write_val_test_preds = zconf.attr(action="store_true")
     write_test_preds = zconf.attr(action="store_true")
     eval_every_steps = zconf.attr(type=int, default=0)
     save_every_steps = zconf.attr(type=int, default=0)
     save_checkpoint_every_steps = zconf.attr(type=int, default=0)
-    save_model_every_logscale = zconf.attr(action="store_true")
     no_improvements_for_n_evals = zconf.attr(type=int, default=0)
     keep_checkpoint_when_done = zconf.attr(action="store_true")
     force_overwrite = zconf.attr(action="store_true")
@@ -56,6 +57,8 @@ class RunConfiguration(zconf.RunConfig):
     local_rank = zconf.attr(default=-1, type=int)
     server_ip = zconf.attr(default="", type=str)
     server_port = zconf.attr(default="", type=str)
+
+    load_best_model = zconf.attr(default=True, type=bool)
 
 
 @zconf.run_config
@@ -157,15 +160,13 @@ def run_loop(args: RunConfiguration, checkpoint=None):
                 save_every_steps=args.save_every_steps,
                 eval_every_steps=args.eval_every_steps,
                 save_checkpoint_every_steps=args.save_checkpoint_every_steps,
-                save_model_every_logscale=args.save_model_every_logscale,
-                max_step=jiant_task_container.global_train_config.max_steps,
                 no_improvements_for_n_evals=args.no_improvements_for_n_evals,
                 checkpoint_saver=checkpoint_saver,
                 output_dir=args.output_dir,
                 verbose=True,
                 save_best_model=args.do_save or args.do_save_best,
                 save_last_model=args.do_save or args.do_save_last,
-                load_best_model=True,
+                load_best_model=args.load_best_model,
                 log_writer=quick_init_out.log_writer,
             )
             if is_resumed:
@@ -201,9 +202,28 @@ def run_loop(args: RunConfiguration, checkpoint=None):
                 path=os.path.join(args.output_dir, "test_preds.p"),
             )
 
+        if args.do_val_test:
+            val_test_results_dict = runner.run_val_test(
+                task_name_list=runner.jiant_task_container.task_run_config.val_test_task_list,
+                return_preds=args.write_val_preds,
+            )
+            jiant_evaluate.write_val_test_results(
+                val_test_results_dict=val_test_results_dict,
+                metrics_aggregator=runner.jiant_task_container.metrics_aggregator,
+                output_dir=args.output_dir,
+                verbose=True,
+            )
+            if args.write_val_test_preds:
+                jiant_evaluate.write_preds(
+                    eval_results_dict=val_test_results_dict,
+                    path=os.path.join(args.output_dir, "val_test_preds.p"),
+                )
+        else:
+            assert not args.write_val_test_preds
+
     if (
         not args.keep_checkpoint_when_done
-        and (args.save_checkpoint_every_steps or args.save_model_every_logscale)
+        and args.save_checkpoint_every_steps
         and os.path.exists(os.path.join(args.output_dir, "checkpoint.p"))
     ):
         os.remove(os.path.join(args.output_dir, "checkpoint.p"))

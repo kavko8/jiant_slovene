@@ -15,6 +15,7 @@ class ModelArchitectures(Enum):
     BART = 6
     MBART = 7
     ELECTRA = 8
+    CAMEMBERT = 9
 
     @classmethod
     def from_model_type(cls, model_type: str):
@@ -45,6 +46,8 @@ class ModelArchitectures(Enum):
             return cls.MBART
         elif model_type.startswith("electra"):
             return cls.ELECTRA
+        elif model_type.startswith("camembert"):
+            return cls.CAMEMBERT
         else:
             raise KeyError(model_type)
 
@@ -66,6 +69,8 @@ class ModelArchitectures(Enum):
             return cls.XLM_ROBERTA
         elif isinstance(transformers_model, transformers.modeling_albert.AlbertPreTrainedModel):
             return cls.ALBERT
+        elif isinstance(transformers_model, transformers.CamembertForMaskedLM):
+            return cls.CAMEMBERT
         elif isinstance(transformers_model, transformers.modeling_bart.PretrainedBartModel):
             return bart_or_mbart_model_heuristic(model_config=transformers_model.config)
         elif isinstance(transformers_model, transformers.modeling_electra.ElectraPreTrainedModel):
@@ -91,6 +96,8 @@ class ModelArchitectures(Enum):
             return cls.MBART
         elif isinstance(tokenizer_class, transformers.ElectraTokenizer):
             return cls.ELECTRA
+        elif isinstance(tokenizer_class, transformers.CamembertTokenizer):
+            return cls.CAMEMBERT
         else:
             raise KeyError(str(tokenizer_class))
 
@@ -105,6 +112,7 @@ class ModelArchitectures(Enum):
             cls.BART,
             cls.MBART,
             cls.ELECTRA,
+            cls.CAMEMBERT
         ]
 
     @classmethod
@@ -143,6 +151,11 @@ class ModelArchitectures(Enum):
             and encoder.__class__.__name__ == "ElectraModel"
         ):
             return cls.ELECTRA
+        elif (
+            isinstance(encoder, transformers.CamembertModel)
+            and encoder.__class__.__name__ == "CamembertModel"
+        ):
+            return cls.CAMEMBERT
         else:
             raise KeyError(type(encoder))
 
@@ -230,6 +243,20 @@ def build_featurization_spec(model_type, max_seq_length):
             sequence_b_segment_id=0,  # XLM-RoBERTa has no token_type_ids
             sep_token_extra=True,
         )
+    elif model_arch == ModelArchitectures.CAMEMBERT:
+        # This needs to be verified.
+        return FeaturizationSpec(
+            max_seq_length=max_seq_length,
+            cls_token_at_end=False,
+            pad_on_left=False,
+            cls_token_segment_id=0,
+            pad_token_segment_id=0,
+            pad_token_id=1,  # Roberta uses pad_token_id = 1
+            pad_token_mask_id=0,
+            sequence_a_segment_id=0,
+            sequence_b_segment_id=0,  # RoBERTa has no token_type_ids
+            sep_token_extra=True,
+        )
     elif model_arch == ModelArchitectures.BART:
         # BART is weird
         # token 0 = '<s>' which is the cls_token
@@ -290,6 +317,7 @@ TOKENIZER_CLASS_DICT = {
     ModelArchitectures.BART: transformers.BartTokenizer,
     ModelArchitectures.MBART: transformers.MBartTokenizer,
     ModelArchitectures.ELECTRA: transformers.ElectraTokenizer,
+    ModelArchitectures.CAMEMBERT: transformers.CamembertTokenizer,
 }
 
 

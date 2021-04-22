@@ -151,6 +151,9 @@ class MultiRCTask(SuperGlueMixin, Task):
     def get_test_examples(self):
         return self._create_examples(lines=read_json_lines(self.test_path), set_type="test")
 
+    def get_val_test_examples(self):
+        return self._create_examples(lines=read_json_lines(self.val_test_path), set_type="val_test")
+
     def _create_examples(self, lines, set_type):
         examples = []
         for line in lines:

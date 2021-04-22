@@ -35,7 +35,7 @@ class Example(BaseExample):
             guid=self.guid,
             passage_tokens=tokenizer.tokenize(self.passage_text),
             query_tokens=tokenizer.tokenize(filled_query_text),
-            label_id=ReCoRDTask.LABEL_TO_ID[self.label],
+            label_id=ReCoRDTaskLemma.LABEL_TO_ID[self.label],
             entity_str=self.entity_str,
             label_set=set(self.answers_dict.values()),
         )
@@ -108,7 +108,7 @@ class Batch(BatchMixin):
     label_set: set
 
 
-class ReCoRDTask(SuperGlueMixin, Task):
+class ReCoRDTaskLemma(SuperGlueMixin, Task):
     Example = Example
     TokenizedExample = Example
     DataRow = DataRow
@@ -117,6 +117,8 @@ class ReCoRDTask(SuperGlueMixin, Task):
     TASK_TYPE = TaskTypes.CLASSIFICATION
     LABELS = [False, True]
     LABEL_TO_ID, ID_TO_LABEL = labels_to_bimap(LABELS)
+
+    state = None
 
     def get_train_examples(self):
         return self._create_examples(lines=read_json_lines(self.train_path), set_type="train")

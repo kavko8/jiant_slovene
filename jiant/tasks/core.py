@@ -149,6 +149,10 @@ class Task:
     def test_path(self):
         return self.path_dict["test"]
 
+    @property
+    def val_test_path(self):
+        return self.path_dict["val_test"]
+
     @classmethod
     def collate_fn(cls, batch):
         # cls.collate_fn
