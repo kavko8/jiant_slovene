@@ -5,7 +5,7 @@ from matplotlib.ticker import MaxNLocator
 import numpy as np
 
 
-def create(tasks, model_name, path_to_look, num_epochs):
+def create(tasks, model_name, path_to_look, num_epochs, epoch_length):
     for path, _, files in os.walk(path_to_look):
         if "graph_steps.zlog" in files:
             graph_results_path = os.path.join(path, "graph_steps.zlog")
@@ -16,16 +16,16 @@ def create(tasks, model_name, path_to_look, num_epochs):
                     scores_per_task[task] = []
                 for obj in reader:
                     obj = dict(obj)
-                    score = float("%.2f" % (obj["score"]*100))
+                    score = float("%.2f" % (obj["score"] * 100))
                     scores.append(score)
                     for task in tasks:
-                        task_score = float("%.2f" % (obj["metrics"][task]["major"]*100))
+                        task_score = float("%.2f" % (obj["metrics"][task]["major"] * 100))
                         scores_per_task[task].append(task_score)
 
-                #x = [i+1 for i in range(num_epochs)]
-                #plt.plot(x, scores, marker="o")
+                # x = [i+1 for i in range(num_epochs)]
+                # plt.plot(x, scores, marker="o")
 
-                #plt.show()
+                # plt.show()
 
         if "loss_train.zlog" in files:
             loss_resuts_path = os.path.join(path, "loss_train.zlog")
@@ -42,21 +42,23 @@ def create(tasks, model_name, path_to_look, num_epochs):
                 for task in tasks:
                     epoch_list = []
                     values = loss[task].copy()
-                    epoch_length = len(values)//num_epochs
+
                     for j, i in enumerate(values):
-                        if ((j+1) % epoch_length) == 0:
-                            suma = sum(values[j-epoch_length+1:j+1]) / epoch_length
+                        if ((j + 1) % epoch_length) == 0:
+                            suma = sum(values[j - epoch_length + 1:j + 1]) / epoch_length
                             suma = float("%.3f" % suma)
                             epoch_list.append(suma)
                     avg_loss_per_epochs[task] = epoch_list
 
-                    #x = [i+1 for i in range(num_epochs)]
-                    #plt.plot(x, epoch_list, marker="o")
+                    # x = [i+1 for i in range(num_epochs)]
+                    # plt.plot(x, epoch_list, marker="o")
 
-                    #plt.show()
+                    # plt.show()
 
-    x = [i+1 for i in range(num_epochs)]
     y1 = scores
+    if num_epochs > len(y1):
+        num_epochs = len(scores)
+    x = [i + 1 for i in range(num_epochs)]
     fig, ax1 = plt.subplots()
     color = 'tab:blue'
     ax1.set_xlabel('Epoch')
@@ -64,7 +66,7 @@ def create(tasks, model_name, path_to_look, num_epochs):
     x_ax = ax1.axes.get_xaxis()
     x_ax.set_major_locator(MaxNLocator(integer=True))
     ax1.plot(x, y1, color=color, marker="o")
-    ax1.set_xticks(np.arange(start=1, stop=len(x)+1))
+    ax1.set_xticks(np.arange(start=1, stop=len(x) + 1))
     ax1.tick_params(axis='y', labelcolor=color)
     plt.savefig(f"{path_to_look}/{model_name}/all_tasks_accuracy.png")
     plt.show()
