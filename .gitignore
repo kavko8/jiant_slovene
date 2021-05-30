@@ -126,3 +126,11 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+.idea/
+models/
+cache/
+runs/
+run_configs/
+tasks/
+trained_models/
+config_file.py

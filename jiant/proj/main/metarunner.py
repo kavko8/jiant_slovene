@@ -63,11 +63,16 @@ class JiantMetarunner(AbstractMetarunner):
         no_improvements_for_n_evals,
         checkpoint_saver,
         output_dir,
+        epoch_steps,
+        epochs_to_save,
         verbose: bool = True,
         save_best_model: bool = True,
         load_best_model: bool = True,
         save_last_model: bool = True,
         log_writer: BaseZLogger = PRINT_LOGGER,
+        graph_steps: int = 0,
+        graph_per_epoch: bool = False,
+        save_every_epoch: bool = False,
     ):
         self.runner = runner
         self.save_every_steps = save_every_steps
@@ -81,6 +86,11 @@ class JiantMetarunner(AbstractMetarunner):
         self.load_best_model = load_best_model
         self.save_last_model = save_last_model
         self.log_writer = log_writer
+        self.graph_steps = graph_steps
+        self.graph_per_epoch = graph_per_epoch
+        self.save_every_epoch = save_every_epoch
+        self.epoch_steps = epoch_steps
+        self.epochs_to_save = epochs_to_save
 
         self.best_val_state = None
         self.best_state_dict = None
@@ -116,11 +126,28 @@ class JiantMetarunner(AbstractMetarunner):
             return False
         return (self.train_state.global_steps + 1) % self.save_every_steps == 0
 
+    def should_epoch_save_model(self) -> bool:
+        if not self.save_every_epoch:
+            return False
+        if (self.train_state.global_steps / self.epoch_steps).is_integer():
+            num_epoch = int(self.train_state.global_steps / self.epoch_steps)
+            if num_epoch in self.epochs_to_save:
+                return self.train_state.global_steps % self.epoch_steps == 0
+        else:
+            return False
+
     def save_model(self):
         save_model_with_metadata(
             model_or_state_dict=self.model,
             output_dir=self.output_dir,
             file_name=f"model__{self.train_state.global_steps:09d}",
+        )
+
+    def epoch_save_model(self):
+        save_model_with_metadata(
+            model_or_state_dict=self.model,
+            output_dir=self.output_dir,
+            file_name=f"model__after_{int(self.train_state.global_steps / self.epoch_steps)}_epoch",
         )
 
     def save_last_model_with_metadata(self):
@@ -157,6 +184,14 @@ class JiantMetarunner(AbstractMetarunner):
         if self.eval_every_steps == 0:
             return False
         return (self.train_state.global_steps + 1) % self.eval_every_steps == 0
+
+    def graph_should_eval_every_steps(self) -> bool:
+        if self.graph_steps == 0:
+            return False
+        return self.train_state.global_steps % self.graph_steps == 0
+
+    def graph_eval_model_every_steps(self):
+        self.graph_eval_save_every_steps()
 
     def eval_model(self):
         self.eval_save()
@@ -256,3 +291,23 @@ class JiantMetarunner(AbstractMetarunner):
         )
         self.log_writer.flush()
         self.val_state_history.append(val_state)
+
+    def graph_eval_save_every_steps(self):
+        val_results_dict = self.runner.run_val(
+            task_name_list=self.runner.jiant_task_container.task_run_config.train_val_task_list,
+            use_subset=True,
+        )
+        aggregated_major = jiant_task_sampler.compute_aggregate_major_metrics_from_results_dict(
+            metrics_aggregator=self.runner.jiant_task_container.metrics_aggregator,
+            results_dict=val_results_dict,
+        )
+        val_metrics_dict = jiant_task_sampler.get_metrics_dict_from_results_dict(
+            results_dict=val_results_dict,
+        )
+        val_state = ValState(
+            score=float(aggregated_major),
+            metrics=val_metrics_dict,
+            train_state=self.train_state.new(),
+        )
+        self.log_writer.write_entry("graph_steps", val_state.to_dict())
+        self.log_writer.flush()

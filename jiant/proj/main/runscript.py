@@ -60,6 +60,12 @@ class RunConfiguration(zconf.RunConfig):
 
     load_best_model = zconf.attr(default=True, type=bool)
 
+    graph_steps = zconf.attr(default=0, type=int)
+    graph_per_epoch = zconf.attr(default=False, type=bool)
+    epoch_steps = zconf.attr(default=0, type=int)
+    epochs_to_save = zconf.attr(default=[], type=list)
+    save_every_epoch = zconf.attr(default=False, type=bool)
+
 
 @zconf.run_config
 class ResumeConfiguration(zconf.RunConfig):
@@ -168,6 +174,11 @@ def run_loop(args: RunConfiguration, checkpoint=None):
                 save_last_model=args.do_save or args.do_save_last,
                 load_best_model=args.load_best_model,
                 log_writer=quick_init_out.log_writer,
+                graph_steps=args.graph_steps,
+                graph_per_epoch=args.graph_per_epoch,
+                epoch_steps=args.epoch_steps,
+                epochs_to_save=args.epochs_to_save,
+                save_every_epoch=args.save_every_epoch,
             )
             if is_resumed:
                 metarunner.load_state(checkpoint["metarunner_state"])

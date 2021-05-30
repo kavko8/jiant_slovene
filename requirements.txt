@@ -1,5 +1,7 @@
--r requirements-no-torch.txt
 wheel
+-r requirements-no-torch.txt
+jsonlines==2.0.0
 classla==1.0.1
 torch==1.5.0
 torchvision==0.6.0
+matplotlib==3.4.2

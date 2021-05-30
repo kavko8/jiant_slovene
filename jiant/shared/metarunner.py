@@ -20,6 +20,12 @@ class AbstractMetarunner:
     def should_eval_model(self) -> bool:
         raise NotImplementedError()
 
+    def graph_should_eval_every_steps(self) -> bool:
+        raise NotImplementedError()
+
+    def graph_eval_model_every_steps(self):
+        raise NotImplementedError()
+
     def eval_model(self):
         raise NotImplementedError()
 
@@ -30,6 +36,12 @@ class AbstractMetarunner:
         raise NotImplementedError()
 
     def returned_result(self):
+        raise NotImplementedError()
+
+    def epoch_save_model(self):
+        raise NotImplementedError()
+
+    def should_epoch_save_model(self):
         raise NotImplementedError()
 
     def run_train_loop(self):
@@ -44,6 +56,12 @@ class AbstractMetarunner:
 
             if self.should_eval_model():
                 self.eval_model()
+
+            if self.graph_should_eval_every_steps():
+                self.graph_eval_model_every_steps()
+
+            if self.should_epoch_save_model():
+                self.epoch_save_model()
 
             if self.should_break_training():
                 break
