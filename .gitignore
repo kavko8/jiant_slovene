@@ -133,4 +133,3 @@ runs/
 run_configs/
 tasks/
 trained_models/
-config_file.py

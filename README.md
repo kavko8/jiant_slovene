@@ -1,3 +1,82 @@
+This repository is a fork of the jiantv2 repository from https://github.com/nyu-mll/jiant/ with some modifications for evaluations
+on Slovene version of SuperGLUE.
+
+### Prerequisite:
+ - Linux based OS
+ - Python3.x
+
+### Installation:
+
+We recommend creation of a new virtual environment and install the dependencies in that environment. Alternatively you can
+also use conda.
+
+##### Steps:
+
+- git clone "this_repo"
+- cd jiant_slovene 
+-  mkdir venv
+- python3 -m venv ./venv
+- source ./venv/bin/activate
+- pip install -r requirements.txt
+- pip install -e .
+
+Once the environment is set you should create a new directory named "tasks" in the same directory as this project.
+This directory will contain your datasets. See tasks_directory_structure.txt as an example on how to set the "tasks" directory for machine translated version
+of SuperGlue. {task_name}_config.json must contain absolute paths to the directories that contain dataset files
+(train.jsonl, val.jsonl, test.jsonl, val_test.jsonl). For example boolq_config.json for machine translated SuperGLUE:
+```
+{"task": "boolq", "paths": {"train": "/home/matic/Desktop/graphs_jiant/tasks/data/machine_translation/boolq/train.jsonl", "val": "/home/matic/Desktop/graphs_jiant/tasks/data/machine_translation/boolq/val.jsonl", "test": "/home/matic/Desktop/graphs_jiant/tasks/data/machine_translation/boolq/test.jsonl", "val_test": "/home/matic/Desktop/graphs_jiant/tasks/data/machine_translation/boolq/val_test.jsonl"}, "name": "boolq"}
+```
+All directories and tasks must be in lower case. For easier creation of config files see script "config_file.py".
+
+
+#### Running main.py
+Once the directory is set you can change the parameters (for example batch size, epochs etc.) in main.py and run it.
+
+The script first loads all the necessary libraries and then reads the dataset (caches it and saves). Then it creates a
+configuration and starts training.
+
+Variable "pretrained" should contain a string with the path to transformers model for example "EMBEDDIA/crosloengual-bert".
+There is a bug in this version of transformers that this repo uses and one has to manually add Sloberta model to directory
+if needed for evaluations. Sloberta can be downloaded from https://www.clarin.si/repository/xmlui/handle/11356/1397 and extracted
+to "./models/pretrained/sloberta" directory. Variable "output_name" (name of the output model) is taken from the dictionary containing paths to models - if someone
+wants to evaluate another model it should be added to dictionary or manually assign "output_name".
+List "tasks" is a list of strings and contains the tasks we want to evaluate (for single task add only one string for example "cb",
+for multitask add multiple strings like "cb", "boolq" etc.)
+
+We have added two features (still needs to be tested) to evaluate after each epoch on development dataset (val.jsonl) and
+create a plot visualizing accuracy per epoch and loss per epoch. To do that set parameter "eval_every_epoch=True"
+and the number of steps in epoch "graph_steps={some number}" to desired number. If you do not know the number of steps in one epoch
+set variable "graph_per_epoch=True" and the script will calculate how many steps are there in one epoch. We also added the
+option to save the model every each epoch if we are also validating after each epoch. To save after epoch set variable "save_every_epoch=True"
+and insert numbers of after which epoch you wish to save the model (for example "epochs_to_save=[1, 4, 10]" will save the model
+after first, fourth and tenth epoch). The default output of each run is in "./runs" directory and the models are overwritten
+if we execute the script again. At the end of main.py you can see a variable "do_backup=True" which will copy
+the ./runs" directory to:
+```
+"f"./trained_models/{output_name}__{name}__{task_name}__epochs_{epochs}__train_batch_{train_batch_size}__eval_batch_{eval_batch_size}__num_eval_steps_{eval_every_steps}"
+```
+This can be disabled or modified according to the needs of anyone.
+
+We have also added the "val_test" phase, which can be run at the end of training. This "val_test.jsonl" contains the solved "test.jsonl"
+examples of a task and it calculates the metrics on those examples.
+
+The saved models can be used again to train or simply just to do evaluation. If you wish to use a saved model
+you have to set variable " model_load_mode='partial' " instead of 'from_transformers' and "model_path" in "main_runscript.RunConfiguration" set to the path of the saved model.
+For clarification see "main_eval_saved_model.py". If you do not wish to train the model again set variable "do_train=False".
+
+After each run there are some file that are created (in "./runs" or in the backup directory) that contain information about the run
+like val_metrics.json and val_test_metrics.json contain the metrics of evaluations on "val" and "val_test" phase, loss_train.zlog contains
+information about the loss after each step etc.
+
+We recommend a quick run of the main.py (for example epoch=0.1) and see for yourself all the output files jiant creates.
+
+You can also read the original README.md below for extra clarification or see the example notebooks in ./examples.
+
+_________________________________________________________________________________________
+# Original README.md
+
+
 <div align="center">
 
 # `jiant` is an NLP toolkit
