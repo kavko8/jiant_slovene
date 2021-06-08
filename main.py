@@ -54,6 +54,7 @@ epochs_to_save = []  # if we do eval on every epoch, we can after which epoch we
 # if we want to save after all epoch set list to [i+1 for i in range(epochs)]. Note that one save equals to 0.5GB
 
 # Some tokenization parameters
+warmup_steps_proportion = 0.1
 max_seq_length = 256
 smart_truncate = True
 do_iter = True
@@ -111,6 +112,7 @@ jiant_run_config = configurator.SimpleAPIMultiTaskConfigurator(
     epochs=epochs,
     num_gpus=num_gpus,
     eval_subset_num=eval_subset_num,
+    warmup_steps_proportion=warmup_steps_proportion,
 ).create_config()
 
 # Make directories and place configuration .json file

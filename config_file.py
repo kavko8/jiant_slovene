@@ -5,8 +5,8 @@ import os
 for mode in ["machine_translation"]:
     tasks_list = ["boolq", "cb", "copa", "multirc", "rte"]
     for task in tasks_list:
-        if not os.path.isdir(f"{os.getcwd()}/tasks/configs/{mode}"):
-            os.makedirs(f"{os.getcwd()}/tasks/configs/{mode}")
+        if not os.path.isdir(f"{os.getcwd()}/tasks/{mode}"):
+            os.makedirs(f"{os.getcwd()}/tasks/{mode}/configs")
         json_file = {
             "task": f"{task}",
             "paths": {
@@ -17,5 +17,5 @@ for mode in ["machine_translation"]:
             },
             "name": f"{task}"
         }
-        with open(f"{os.getcwd()}/tasks/configs/{mode}/{task}_config.json", "w") as f:
+        with open(f"{os.getcwd()}/tasks/{mode}/configs/{task}_config.json", "w") as f:
             json.dump(json_file, f)

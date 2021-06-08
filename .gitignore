@@ -137,3 +137,7 @@ tasks/human_translation
 tasks/data/machine_translation
 tasks/data/machine_human
 trained_models/
+tasks
+1622369742
+1622440802
+make_plots_test.py

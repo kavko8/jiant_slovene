@@ -5,6 +5,10 @@ from matplotlib.ticker import MaxNLocator
 import numpy as np
 
 
+def movingaverage(x, w):
+    return np.convolve(x, np.ones(w), 'valid') / w
+
+
 def create(tasks, model_name, path_to_look, num_epochs, epoch_length):
     for path, _, files in os.walk(path_to_look):
         if "graph_steps.zlog" in files:
@@ -41,17 +45,15 @@ def create(tasks, model_name, path_to_look, num_epochs, epoch_length):
                     for j, i in enumerate(values):
                         if ((j + 1) % epoch_length) == 0:
                             suma = sum(values[j - epoch_length + 1:j + 1]) / epoch_length
-                            suma = float("%.3f" % suma)
                             epoch_list.append(suma)
                     avg_loss_per_epochs[task] = epoch_list
 
     y1 = scores
-    if num_epochs > len(y1):
-        num_epochs = len(scores)
+    num_epochs = len(scores)
     x = [i + 1 for i in range(num_epochs)]
     fig, ax1 = plt.subplots()
     color = 'tab:blue'
-    ax1.set_xlabel('Epoch')
+    ax1.set_xlabel(f'Epoch ({epoch_length} steps in 1 epoch)')
     ax1.set_ylabel('Accuracy (major) (%)', color=color)
     x_ax = ax1.axes.get_xaxis()
     x_ax.set_major_locator(MaxNLocator(integer=True))
@@ -63,34 +65,48 @@ def create(tasks, model_name, path_to_look, num_epochs, epoch_length):
     plt.close()
     for j, task in enumerate(tasks):
         y1 = scores_per_task[task]
-        fig, ax1 = plt.subplots()
+        y2 = loss[task]
+        y2 = movingaverage(y2, epoch_length)
+        x2 = [i + 1 for i in range(len(y2))]
+        fig = plt.figure()
+        ax = fig.add_subplot(111, label="1")
+        ax2 = fig.add_subplot(111, label="2", frame_on=False)
         color = 'tab:blue'
-        ax1.set_xlabel('Epoch')
-        ax1.set_ylabel(f'{task} acc (major) (%)', color=color)
-        x_ax = ax1.axes.get_xaxis()
+        ax.set_xlabel(f'Epoch ({epoch_length} steps in 1 epoch)')
+        ax.set_ylabel('Accuracy (major) (%)', color=color)
+        x_ax = ax.axes.get_xaxis()
         x_ax.set_major_locator(MaxNLocator(integer=True))
-        ax1.plot(x, y1, color=color, marker="o")
-        ax1.set_xticks(np.arange(start=1, stop=len(x) + 1))
-        ax1.tick_params(axis='y', labelcolor=color)
-        ax2 = ax1.twinx()
-        values = avg_loss_per_epochs[task]
+        ax.plot(x, y1, color=color, marker="o")
+        ax.set_xticks(np.arange(start=1, stop=len(x) + 1))
+        ax.tick_params(axis='y', labelcolor=color)
         color = 'tab:red'
-        ax2.set_ylabel(f"{task} loss", color=color)
-        x_ax2 = ax2.axes.get_xaxis()
-        x_ax2.set_major_locator(MaxNLocator(integer=True))
-        ax2.plot(x, values, color=color, marker="o")
-        ax2.set_xticks(np.arange(start=1, stop=len(x) + 1))
-        ax2.tick_params(axis='y', labelcolor=color)
-        fig.tight_layout()
+        ax2.plot(x2, y2, color=color)
+        ax2.xaxis.tick_top()
+        ax2.yaxis.tick_right()
+        ax2.set_xlabel(f'Steps ({epoch_length} steps in one epoch)')
+        ax2.set_ylabel(f'{task.upper()} training loss (moving average)', color=color)
+        ax2.xaxis.set_label_position('top')
+        ax2.yaxis.set_label_position('right')
+        ax2.tick_params(axis='y', colors=color)
         plt.savefig(f"{path_to_look}/{model_name}/{task}_acc_loss.png")
         plt.show()
         plt.close()
-        x2 = [i + 1 for i in range(len(loss[task]))]
-        y2 = loss[task]
+
+        x2 = [i + 1 for i in range(len(y2))]
         fig, ax1 = plt.subplots()
         color = 'tab:red'
-        ax1.set_xlabel('Steps')
-        ax1.set_ylabel(f'Loss {task}', color=color)
+        ax1.set_xlabel(f'Steps ({epoch_length} steps in 1 epoch)')
+        ax1.set_ylabel(f'{task} loss (moving average)', color=color)
+        ax1.plot(x2, y2, color=color)
+        plt.savefig(f"{path_to_look}/{model_name}/loss_MA_{task}.png")
+        plt.show()
+        plt.close()
+        y2 = loss[task]
+        x2 = [i + 1 for i in range(len(y2))]
+        fig, ax1 = plt.subplots()
+        color = 'tab:red'
+        ax1.set_xlabel(f'Steps ({epoch_length} steps in 1 epoch)')
+        ax1.set_ylabel(f'{task} loss', color=color)
         ax1.plot(x2, y2, color=color)
         plt.savefig(f"{path_to_look}/{model_name}/loss_{task}.png")
         plt.show()

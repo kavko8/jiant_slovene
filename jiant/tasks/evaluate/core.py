@@ -23,8 +23,8 @@ from jiant.utils.python.io import read_json
 from jiant.utils.string_comparing import string_f1_score, exact_match_score, string_f1_score_lemma, exact_match_score_lemma, string_f1_score_stemm, exact_match_score_stemm
 import classla
 
-#classla.download('sl')
-#nlp = classla.Pipeline('sl', processors='tokenize, lemma')# download standard models for Slovenian, use hr for Croatian, sr for Serbian, bg for Bulgarian, mk for Macedonian
+classla.download('sl')
+nlp = classla.Pipeline('sl', processors='tokenize, lemma')# download standard models for Slovenian, use hr for Croatian, sr for Serbian, bg for Bulgarian, mk for Macedonian
 
 @dataclass
 class Metrics(ExtendedDataClassMixin):
